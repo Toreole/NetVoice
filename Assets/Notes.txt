@@ -1,0 +1,19 @@
+Sending and receiving audio.
+
+1. basics
+    - Getting audio input from the microphone.
+        > microphone.devices -> dropdown to select which one to use.
+        > Microphone.Start to start listening. Can only be for a certain amount of time. 
+            -> "start - loop = true" will force it to skip to the beginning to continue writing.
+            -> use this start as offset and the data length to send the audio.
+        > Get microphone frequency info to actually setup that stuff.
+
+2. using the audio data.
+    - audioClip.GetData
+    - the float[] needs to be converted to a byte[] 
+    - compress it? 
+    - send it to the server
+    - server sends it to all players that are supposed to hear it.
+    - client receives audio
+    - convert byte[] back to float[]
+    - audioClip.SetData -> audioSource.Play if not playing already.
