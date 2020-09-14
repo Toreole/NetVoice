@@ -2,6 +2,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using System.Collections.Generic;
+using System.Collections;
 
 public class ClientBehaviour : MonoBehaviour
 {
@@ -10,11 +11,15 @@ public class ClientBehaviour : MonoBehaviour
     public bool isDone;
 
     [SerializeField]
-    protected InputField addressInput, nameInput;
+    protected InputField addressInput, nameInput, chatInput;
     [SerializeField]
     protected Button startButton;
     [SerializeField]
-    protected Text msgDisplay, pingDisplay;
+    protected Text pingDisplay;
+    [SerializeField]
+    protected Text chat;
+    [SerializeField]
+    protected ScrollRect chatBoxScroll;
     [SerializeField]
     protected string playerName = "crewmate?";
     [SerializeField]
@@ -26,8 +31,15 @@ public class ClientBehaviour : MonoBehaviour
 
     Transform self;
     //Dictionary from the uint playerID to the Transform component of the player in the scene.
-    Dictionary<uint, Transform> otherPlayers = new Dictionary<uint, Transform>();
+    Dictionary<uint, NetworkPlayer> otherPlayers = new Dictionary<uint, NetworkPlayer>();
+    Dictionary<uint, Coroutine> positionLerpRoutines = new Dictionary<uint, Coroutine>();
     uint ID;
+
+    ulong lastPingSent = 0;
+    //the last time a ping was sent out to the players.
+    float lastPing = 0;
+    [SerializeField]
+    protected float pingInterval = 2.5f;
 
     private bool isStarted = false, canSend = false;
 
@@ -75,7 +87,7 @@ public class ClientBehaviour : MonoBehaviour
         if(!connection.IsCreated)
         {
             if(!isDone)
-                Debug.Log("something went wrong during connect");
+                Debug.Log("something went wrong during connect"); //OR we just disconnected and need to handle it somehow.
             return;
         }
 
@@ -105,7 +117,7 @@ public class ClientBehaviour : MonoBehaviour
                         HandlePlayerJoin(streamReader);
                         break;
                     case MessageType.Ping:
-                        HandlePing(streamReader);
+                        HandlePing();
                         break;
                     case MessageType.Position:
                         HandlePositionData(streamReader);
@@ -117,7 +129,10 @@ public class ClientBehaviour : MonoBehaviour
             }
             else if(cmd == NetworkEvent.Type.Disconnect)
             {
-                Debug.Log("Disonnected from the server");
+                //Debug.Log("Disonnected from the server");
+                //TODO: add error code (timeout???)
+                chat.text += "-- Disconnected from Server. --\n"; //TODO: future: go back to menu scene or something to avoid getting a million debug logs.
+                chatBoxScroll.verticalNormalizedPosition = 0;
                 connection = default(NetworkConnection);
             }
         }
@@ -125,7 +140,8 @@ public class ClientBehaviour : MonoBehaviour
         //temp move
         float inputX = Input.GetAxis("Horizontal");
         float inputY = Input.GetAxis("Vertical");
-        self.Translate(new Vector3(inputX * Time.deltaTime, inputY * Time.deltaTime));
+        if(self)
+            self.Translate(new Vector3(inputX * Time.deltaTime, inputY * Time.deltaTime));
 
         if(!canSend)
             return;
@@ -134,20 +150,32 @@ public class ClientBehaviour : MonoBehaviour
             SendPosition();
             lastPosSync = Time.time;
         }
+        if(Time.time - lastPing >= pingInterval)
+        {
+            lastPing = Time.time;
+            PingServer();
+        }
+    }
+
+    ///<summary>
+    ///this will ping the server and save the current time offset. which is used for actual ping (ms) calculation.
+    ///</summary>
+    void PingServer()
+    {
+        var writer = networkDriver.BeginSend(connection);
+        writer.WriteUInt((uint)MessageType.Ping);
+        networkDriver.EndSend(writer);
+        lastPingSent = Util.GetTimeMillis();
     }
 
     ///<summary>
     ///handles the server pinging the player. just send an empty package back to ensure that connection is still there.
     ///</summary>
-    void HandlePing(DataStreamReader streamReader)
+    void HandlePing()
     {
-        ulong timestamp = streamReader.ReadULong();
-        ulong msPing = Util.GetTimeMillis() - timestamp;
+        ulong timestamp = Util.GetTimeMillis();
+        ulong msPing = (timestamp - lastPingSent) / 2;
         pingDisplay.text = msPing.ToString() + "ms";
-
-        var writer = networkDriver.BeginSend(connection);
-        writer.WriteUInt((uint)MessageType.None);
-        networkDriver.EndSend(writer);
     }
 
     ///<summary>
@@ -156,9 +184,28 @@ public class ClientBehaviour : MonoBehaviour
     void HandlePlayerLeave(DataStreamReader streamReader)
     {
         uint playerID = streamReader.ReadUInt();
-        GameObject op = otherPlayers[playerID].gameObject;
+        GameObject op = otherPlayers[playerID].transform.gameObject;
         otherPlayers.Remove(playerID);
         Destroy(op);
+    }
+
+    ///<summary>
+    ///Sends the message you just typed. (if enter was pressed)
+    ///</summary>
+    public void SendChatMessage(string inputMessage)
+    {
+        if(!Input.GetKey(KeyCode.Return))
+            return;
+        chatInput.text = "";
+
+        chat.text += $"<{playerName}>:{inputMessage}\n";
+        chatBoxScroll.verticalNormalizedPosition = 0;
+
+        var writer = networkDriver.BeginSend(connection);
+        writer.WriteUInt((uint)MessageType.Message);
+        writer.WriteUInt(ID);
+        writer.WriteFixedString64(inputMessage);
+        networkDriver.EndSend(writer);
     }
 
     ///<summary>
@@ -166,8 +213,9 @@ public class ClientBehaviour : MonoBehaviour
     ///</summary>
     void HandleMessage(DataStreamReader streamReader)
     {
-        var messageContent = streamReader.ReadFixedString64();
-        msgDisplay.text = $"<Server>: \"{messageContent.ToString()}\"";
+        //playername: message
+        chat.text += $"<{otherPlayers[streamReader.ReadUInt()].name}>:{streamReader.ReadFixedString64()}\n";
+        chatBoxScroll.verticalNormalizedPosition = 0;
         //Debug.Log($"Received message: {messageContent.ToString()}");
     }
 
@@ -187,7 +235,13 @@ public class ClientBehaviour : MonoBehaviour
         newPlayer.GetComponent<SpriteRenderer>().color = new Color(red, green, blue, 1);
         newPlayer.GetComponentInChildren<Text>().text = otherPlayerName;
 
-        otherPlayers.Add(playerID, newPlayer.transform);
+        var playerData = new NetworkPlayer()
+        {
+            transform = newPlayer.transform,
+            name = otherPlayerName
+        };
+        //Debug.Log($"Received info on player: {playerID}");
+        otherPlayers.Add(playerID, playerData);
     }
 
     ///<summary>
@@ -209,11 +263,15 @@ public class ClientBehaviour : MonoBehaviour
         //send it.
         networkDriver.EndSend(writer);
 
+        if(!string.IsNullOrEmpty(nameInput.text))
+            playerName = nameInput.text;
+
         //instantiate self.
         GameObject localInstance = Instantiate(playerPrefab);
         localInstance.GetComponentInChildren<Text>().text = nameInput.text ?? playerName;
         localInstance.GetComponent<SpriteRenderer>().color = playerColor;
         self = localInstance.transform;
+        Camera.main.transform.SetParent(self);
     }
 
     ///<summary>
@@ -221,6 +279,8 @@ public class ClientBehaviour : MonoBehaviour
     ///</summary>
     void SendPosition()
     {
+        if(!self)
+            return;
         var writer = networkDriver.BeginSend(connection);
         writer.WriteUInt((uint)MessageType.Position);
         var position = self.position;
@@ -244,6 +304,31 @@ public class ClientBehaviour : MonoBehaviour
             z = reader.ReadFloat()
         };
         //Debug.Log($"Received position for: {pID} at {position.x}|{position.y}");
-        otherPlayers[pID].position = position;
+        //otherPlayers[pID].position = position;
+        if(positionLerpRoutines.TryGetValue(pID, out Coroutine runningRoutine))
+            StopCoroutine(runningRoutine);
+        if(otherPlayers.TryGetValue(pID, out NetworkPlayer other))
+            positionLerpRoutines[pID] = StartCoroutine(LerpPosition(other.transform, position));
     }
+
+    ///<summary>
+    ///Interpolate the position of the other player towards the new one. This causes other player to lag behind by (ping1 + ping2 + 1/frequency) seconds.
+    ///</summary>
+    IEnumerator LerpPosition(Transform player, Vector3 targetPosition)
+    {
+        float lerpTime = 1f / positionSyncFrequency;
+        Vector3 startPosition = player.position;
+
+        for(float t = 0; t < lerpTime; t += Time.deltaTime)
+        {
+            player.position = Vector3.Lerp(startPosition, targetPosition, t / lerpTime);
+            yield return null;
+        }
+    }
+
+    class NetworkPlayer
+    {
+        public Transform transform;
+        public string name;
+    } 
 }

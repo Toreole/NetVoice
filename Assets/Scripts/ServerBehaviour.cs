@@ -17,11 +17,6 @@ public class ServerBehaviour : MonoBehaviour
 
     uint nextID = 1;
 
-    //the last time a ping was sent out to the players.
-    float lastPing = 0;
-    [SerializeField]
-    protected float pingInterval = 2.5f;
-
     List<PlayerInfo> connectedPlayers = new List<PlayerInfo>();
 
     // Start is called before the first frame update
@@ -121,6 +116,12 @@ public class ServerBehaviour : MonoBehaviour
                         case MessageType.Position:
                             HandlePositionData(streamReader, connections[i]);
                             break;
+                        case MessageType.Ping:
+                            HandlePing(connections[i]);
+                            break;
+                        case MessageType.Message:
+                            HandleMessage(streamReader);
+                            break;
                     }
                 }
                 else if(cmd == NetworkEvent.Type.Disconnect)
@@ -135,17 +136,23 @@ public class ServerBehaviour : MonoBehaviour
 
             }
         }
+    }
 
-        //ping all players if necessary.
-        if(Time.time - lastPing > pingInterval)
+    ///<summary>
+    ///Send a message from one player to all the others.
+    ///</summary>
+    void HandleMessage(DataStreamReader streamReader)
+    {
+        uint senderID = streamReader.ReadUInt();
+        foreach(PlayerInfo player in connectedPlayers)
         {
-            for(int i = 0; i < connections.Length; i++)
-            {
-                if(!connections[i].IsCreated)
-                    continue;
-                Ping(connections[i]);
-            }
-            lastPing = Time.time;
+            if(player.iD == senderID)
+                continue;
+            var writer = networkDriver.BeginSend(player.connection);
+            writer.WriteUInt((uint)MessageType.Message);
+            writer.WriteUInt(senderID);
+            writer.WriteFixedString64(streamReader.ReadFixedString64());
+            networkDriver.EndSend(writer);
         }
     }
 
@@ -166,11 +173,10 @@ public class ServerBehaviour : MonoBehaviour
     ///<summary>
     ///Sends out a *ping* to the player on this connection.
     ///</summary>
-    void Ping(NetworkConnection connection)
+    void HandlePing(NetworkConnection connection)
     {
         var writer = networkDriver.BeginSend(NetworkPipeline.Null, connection);
         writer.WriteUInt((uint)MessageType.Ping);
-        writer.WriteULong(Util.GetTimeMillis());
         networkDriver.EndSend(writer);
     }
 

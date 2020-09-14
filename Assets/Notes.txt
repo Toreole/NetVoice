@@ -1,3 +1,31 @@
+"TODO"
+- Different colours for every player.
+- Chat between players.
+
+
+
+
+- Increase rate of updates for position?
+- Fix Ping calculation n stuff, its dumb rn lmao
+
+
+
+
+
+
+
+
+
+
+
+"DONE"
+
+- Smoother movement (prediction? lerp?)
+
+
+
+
+
 Sending and receiving audio.
 
 1. basics
