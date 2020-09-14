@@ -1,12 +1,10 @@
 "TODO"
-- Different colours for every player.
 
-
-
-
-- Increase rate of updates for position?
+- add collision detection for players
+- smooth movement a bit more if possible
 - Fix Ping calculation n stuff, its dumb rn lmao
 
+- lol get actual gameplay in this
 
 
 
@@ -21,6 +19,7 @@
 
 - Smoother movement (prediction? lerp?)
 - Chat between players.
+- Different colours for every player.
 
 
 
