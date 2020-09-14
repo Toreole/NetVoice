@@ -1,6 +1,5 @@
 "TODO"
 - Different colours for every player.
-- Chat between players.
 
 
 
@@ -21,6 +20,7 @@
 "DONE"
 
 - Smoother movement (prediction? lerp?)
+- Chat between players.
 
 
 

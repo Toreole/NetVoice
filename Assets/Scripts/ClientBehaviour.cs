@@ -23,7 +23,9 @@ public class ClientBehaviour : MonoBehaviour
     [SerializeField]
     protected string playerName = "crewmate?";
     [SerializeField]
-    protected Color playerColor = Color.red;
+    protected uint playerColorID;
+    [SerializeField]
+    protected ColorPallette pallette;
 
     [SerializeField]
     protected GameObject playerPrefab;
@@ -111,6 +113,7 @@ public class ClientBehaviour : MonoBehaviour
                         break;
                     case MessageType.AssignID:
                         ID = streamReader.ReadUInt();
+                        playerColorID = streamReader.ReadUInt();
                         SendPlayerInfo();
                         break;
                     case MessageType.Join:
@@ -214,7 +217,7 @@ public class ClientBehaviour : MonoBehaviour
     void HandleMessage(DataStreamReader streamReader)
     {
         //playername: message
-        chat.text += $"<{otherPlayers[streamReader.ReadUInt()].name}>:{streamReader.ReadFixedString64()}\n";
+        chat.text += $"<{otherPlayers[streamReader.ReadUInt()].name}>:{streamReader.ReadFixedString64().ToString()}\n";
         chatBoxScroll.verticalNormalizedPosition = 0;
         //Debug.Log($"Received message: {messageContent.ToString()}");
     }
@@ -228,11 +231,10 @@ public class ClientBehaviour : MonoBehaviour
         var newPlayer = Instantiate(playerPrefab);
         uint playerID = streamReader.ReadUInt();
         string otherPlayerName = streamReader.ReadFixedString32().ToString();
-        float red = streamReader.ReadFloat();
-        float green = streamReader.ReadFloat();
-        float blue = streamReader.ReadFloat();
+        uint colorID = streamReader.ReadUInt();
+
         //set up the player with the received data.
-        newPlayer.GetComponent<SpriteRenderer>().color = new Color(red, green, blue, 1);
+        newPlayer.GetComponent<SpriteRenderer>().color = pallette.colors[colorID];
         newPlayer.GetComponentInChildren<Text>().text = otherPlayerName;
 
         var playerData = new NetworkPlayer()
@@ -257,9 +259,7 @@ public class ClientBehaviour : MonoBehaviour
         //custom player name.
         writer.WriteFixedString32(nameInput.text ?? playerName);
         //custom player colour.
-        writer.WriteFloat(playerColor.r);
-        writer.WriteFloat(playerColor.g);
-        writer.WriteFloat(playerColor.b);
+        writer.WriteUInt(playerColorID);
         //send it.
         networkDriver.EndSend(writer);
 
@@ -269,7 +269,7 @@ public class ClientBehaviour : MonoBehaviour
         //instantiate self.
         GameObject localInstance = Instantiate(playerPrefab);
         localInstance.GetComponentInChildren<Text>().text = nameInput.text ?? playerName;
-        localInstance.GetComponent<SpriteRenderer>().color = playerColor;
+        localInstance.GetComponent<SpriteRenderer>().color = pallette.colors[playerColorID];
         self = localInstance.transform;
         Camera.main.transform.SetParent(self);
     }

@@ -14,6 +14,8 @@ public class ServerBehaviour : MonoBehaviour
     protected Text addressText;
     [SerializeField]
     protected InputField inputField;
+    [SerializeField]
+    protected ColorPallette colorPallette;
 
     uint nextID = 1;
 
@@ -21,7 +23,7 @@ public class ServerBehaviour : MonoBehaviour
 
     // Start is called before the first frame update
     void Start()
-    {
+    { 
         networkDriver = NetworkDriver.Create();
         var endpoint = NetworkEndPoint.AnyIpv4;
         endpoint.Port = 9000;
@@ -144,6 +146,7 @@ public class ServerBehaviour : MonoBehaviour
     void HandleMessage(DataStreamReader streamReader)
     {
         uint senderID = streamReader.ReadUInt();
+        FixedString64 content = streamReader.ReadFixedString64();
         foreach(PlayerInfo player in connectedPlayers)
         {
             if(player.iD == senderID)
@@ -151,7 +154,7 @@ public class ServerBehaviour : MonoBehaviour
             var writer = networkDriver.BeginSend(player.connection);
             writer.WriteUInt((uint)MessageType.Message);
             writer.WriteUInt(senderID);
-            writer.WriteFixedString64(streamReader.ReadFixedString64());
+            writer.WriteFixedString64(content);
             networkDriver.EndSend(writer);
         }
     }
@@ -220,7 +223,7 @@ public class ServerBehaviour : MonoBehaviour
             connection = sender,
             iD = streamReader.ReadUInt(),
             name = streamReader.ReadFixedString32().ToString(),
-            colour = new Color(streamReader.ReadFloat(), streamReader.ReadFloat(), streamReader.ReadFloat(), 1)
+            colourID = streamReader.ReadUInt()
         };
         
         //notify all other players that a new one joined.
@@ -235,9 +238,7 @@ public class ServerBehaviour : MonoBehaviour
             //playername
             writer.WriteFixedString32(joinPlayer.name);
             //colour
-            writer.WriteFloat(joinPlayer.colour.r);
-            writer.WriteFloat(joinPlayer.colour.g);
-            writer.WriteFloat(joinPlayer.colour.b);
+            writer.WriteUInt(joinPlayer.colourID);
             networkDriver.EndSend(writer);
         }
         //send info on all existing players.
@@ -247,9 +248,7 @@ public class ServerBehaviour : MonoBehaviour
             writer.WriteUInt((uint) MessageType.Join);
             writer.WriteUInt(player.iD);
             writer.WriteFixedString32(player.name);
-            writer.WriteFloat(player.colour.r);
-            writer.WriteFloat(player.colour.g);
-            writer.WriteFloat(player.colour.b);
+            writer.WriteUInt(player.colourID);
             networkDriver.EndSend(writer);
         }
 
@@ -264,6 +263,18 @@ public class ServerBehaviour : MonoBehaviour
         var writer = networkDriver.BeginSend(NetworkPipeline.Null, connection);
         writer.WriteUInt((uint)MessageType.AssignID);
         writer.WriteUInt(nextID);
+        //TODO: assign the unique colour ID to this player, send it to him.
+        uint colID = uint.MaxValue;
+        for(uint i = 0; i < colorPallette.colors.Length; i ++)
+        {
+            if(connectedPlayers.Exists(x => x.colourID == i))
+                continue;
+            writer.WriteUInt(i);
+            colID = i;
+            break;
+        }
+        if(colID == uint.MaxValue)
+            writer.WriteUInt(0);
         nextID++;
         networkDriver.EndSend(writer);
     }
@@ -273,6 +284,6 @@ public class ServerBehaviour : MonoBehaviour
         public NetworkConnection connection;
         public string name;
         public uint iD;
-        public Color colour;
+        public uint colourID;
     }
 }

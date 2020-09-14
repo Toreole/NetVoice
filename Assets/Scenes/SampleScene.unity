@@ -437,6 +437,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   addressText: {fileID: 2068250522}
   inputField: {fileID: 813608367}
+  colorPallette: {fileID: 11400000, guid: b34e0acb0cdf94b4084511fff4139edc, type: 2}
 --- !u!1 &299029134
 GameObject:
   m_ObjectHideFlags: 0
@@ -2949,7 +2950,8 @@ MonoBehaviour:
   chat: {fileID: 883446250}
   chatBoxScroll: {fileID: 1950303689}
   playerName: crewmate?
-  playerColor: {r: 1, g: 0, b: 0, a: 1}
+  playerColorID: 0
+  pallette: {fileID: 11400000, guid: b34e0acb0cdf94b4084511fff4139edc, type: 2}
   playerPrefab: {fileID: 2170735951798686852, guid: d5d8a72752b6f3e47b6a686888ac68bb, type: 3}
   pingInterval: 2.5
   positionSyncFrequency: 5
